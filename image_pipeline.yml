@@ -1,0 +1,45 @@
+version: 0.2
+
+# This requires the following environment variables be set on the Project:
+# AWS_DEFAULT_REGION (Supplied by CodeBuild)
+# AWS_ACCOUNT_ID
+# IMAGE_REPO_NAME=PROJECT_ID
+# IMAGE_TAG
+
+phases:
+  install:
+    runtime-versions:
+      docker: 20 # TODO this probably needs maintenance
+    commands:
+      # Install dependencies needed for running tests
+      #- pip install -r requirements.txt
+
+      # Upgrade AWS CLI to the latest version
+      - pip install --upgrade awscli
+      
+#  pre_build:
+#    commands:
+#      - echo "Validating Packer template"
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      #- $(aws ecr get-login-password --region $AWS_DEFAULT_REGION) | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/
+      #- $(aws ecr get-login-password --region $AWS_DEFAULT_REGION) | sh
+      - docker login -u AWS -p $(aws ecr get-login-password) https://$(aws sts get-caller-identity --query 'Account' --output text).dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
+      - $(aws ecr get-login --no-include-email --region $AWS_DEFAULT_REGION)
+      - CODEBUILD_RESOLVED_SOURCE_VERSION="${CODEBUILD_RESOLVED_SOURCE_VERSION:-$IMAGE_TAG}"
+      - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - REPO_URI="$(aws sts get-caller-identity --query 'Account' --output text).dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com"
+      #- AWS_REGION = $(AWS_DEFAULT_REGION)
+
+
+  build:
+    commands:
+      - echo "Installing HashiCorp Packer..."
+      - echo $REPO_URI
+      - curl -o packer.zip https://releases.hashicorp.com/packer/1.8.5/packer_1.8.5_linux_amd64.zip && unzip packer.zip -d ./
+      - echo Executing custom CodeBuild scripts...
+      - chmod a+x ./packer
+      - ./packer init .
+      - for script in build-scripts.d/buildImages.d/*.sh ; do echo Executing $script... ; bash $script $PROJECT_ID ${AWS_DEFAULT_REGION} $REPO_URI ; if [ $? != 0 ] ; then exit $? ; fi ; done
+      # Hint: use bash -x for debugging
