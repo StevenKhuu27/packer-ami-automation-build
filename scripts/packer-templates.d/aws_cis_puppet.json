@@ -1,0 +1,50 @@
+{
+    "variables": {
+      "name": "cis_puppet",
+      "access_key":"",
+      "secret_key":"",
+      "region":"ap-southeast-2",
+      "source_ami_name":""
+    },
+    "builders": [{
+      "type": "amazon-ebs",
+      "access_key": "{{user `access_key`}}",
+      "secret_key":"{{user `secret_key`}}",
+      "ami_name": "{{user `name`}}",
+      "region": "{{user `region`}}",
+      "source_ami_filter": {
+        "filters": {
+         "virtualization-type": "hvm",
+         "name": "cis_ubuntu20.04-ap-southeast-2-2023-23",
+         "root-device-type": "ebs"
+        },
+        "owners": [
+         "512937603975"
+        ],
+        "most_recent": true
+      },
+      "instance_type": "m5.large",
+      "communicator": "ssh",
+      "ssh_username": "ubuntu",
+      "run_tags":{"Name":"packer-cis-puppet {{timestamp}}"},
+      "encrypt_boot": true,
+      "metadata_options": {
+        "http_tokens":"required"
+      },
+      "imds_support":"v2.0"
+    }],
+    "provisioners": [
+        {
+            "type": "file",
+            "source": "scripts/",
+            "destination": "/tmp"
+        },
+        {
+          "type": "shell",
+          "execute_command": "{{.Vars}} bash '{{.Path}}'",
+          "inline": [ "sudo ls /tmp",
+          "sudo mv /tmp/puppet_install.sh ~/",
+          "sudo bash ~/puppet_install.sh" ]
+        }
+      ]
+  }
